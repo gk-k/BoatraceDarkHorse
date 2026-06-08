@@ -7,10 +7,13 @@ import com.google.firebase.Firebase
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import com.google.firebase.firestore.toObject
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import java.time.YearMonth
 
 // Data classes for hit rate information
 @Serializable
@@ -41,24 +44,106 @@ class RaceViewModel : ViewModel() {
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing = _isRefreshing.asStateFlow()
 
+    private val _isLoadingMore = MutableStateFlow(false)
+    val isLoadingMore = _isLoadingMore.asStateFlow()
+
+    private val _noMoreData = MutableStateFlow(false)
+    val noMoreData = _noMoreData.asStateFlow()
+
+    private var lastLoadedMonth: YearMonth? = null
+
+    sealed class RaceEvent {
+        object NoMoreData : RaceEvent()
+    }
+
+    private val _events = Channel<RaceEvent>()
+    val events = _events.receiveAsFlow()
+
     private val firestore = Firebase.firestore
 
-    fun fetchDates() {
+    fun fetchDates(isRefresh: Boolean = false) {
+        if (_isRefreshing.value || _isLoadingMore.value) return
+
         viewModelScope.launch {
-            _isRefreshing.value = true
-            firestore.collection("predictions/dark_horse/race_date")
-                .orderBy("race_date", Query.Direction.DESCENDING)
-                .get()
-                .addOnSuccessListener {
-                    _dates.value = it.map { doc -> doc.id }
-                    _isRefreshing.value = false
+            val now = YearMonth.now()
+            val isInitial = isRefresh || _dates.value.isEmpty()
+
+            if (isInitial) {
+                _isRefreshing.value = true
+                _noMoreData.value = false
+                lastLoadedMonth = now.minusMonths(1) // 今月と先月分を対象にする
+                
+                val startDate = lastLoadedMonth!!.atDay(1).toString()
+                
+                firestore.collection("predictions/dark_horse/race_date")
+                    .whereGreaterThanOrEqualTo("race_date", startDate)
+                    .orderBy("race_date", Query.Direction.DESCENDING)
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        _dates.value = snapshot.map { it.id }
+                        _isRefreshing.value = false
+                    }
+                    .addOnFailureListener { e ->
+                        e.printStackTrace()
+                        _isRefreshing.value = false
+                    }
+            } else {
+                if (_noMoreData.value) {
+                    _events.send(RaceEvent.NoMoreData)
+                    return@launch
                 }
-                .addOnFailureListener { e ->
-                    e.printStackTrace()
-                    _dates.value = emptyList()
-                    _isRefreshing.value = false
-                }
+                
+                _isLoadingMore.value = true
+                val targetMonth = lastLoadedMonth?.minusMonths(1) ?: return@launch
+                val startDate = targetMonth.atDay(1).toString()
+                val endDate = lastLoadedMonth!!.atDay(1).toString()
+
+                firestore.collection("predictions/dark_horse/race_date")
+                    .whereGreaterThanOrEqualTo("race_date", startDate)
+                    .whereLessThan("race_date", endDate)
+                    .orderBy("race_date", Query.Direction.DESCENDING)
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        val newDates = snapshot.map { it.id }
+                        if (newDates.isEmpty()) {
+                            // この月が空なら、さらに過去にデータがあるか確認
+                            checkIfNoMoreData(startDate)
+                        } else {
+                            _dates.value = _dates.value + newDates
+                            lastLoadedMonth = targetMonth
+                            _isLoadingMore.value = false
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        e.printStackTrace()
+                        _isLoadingMore.value = false
+                    }
+            }
         }
+    }
+
+    private fun checkIfNoMoreData(beforeDate: String) {
+        firestore.collection("predictions/dark_horse/race_date")
+            .whereLessThan("race_date", beforeDate)
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.isEmpty) {
+                    _noMoreData.value = true
+                    _isLoadingMore.value = false
+                    viewModelScope.launch {
+                        _events.send(RaceEvent.NoMoreData)
+                    }
+                } else {
+                    // まだ過去にデータがある（この月がたまたま空だった）場合はさらに遡る
+                    lastLoadedMonth = lastLoadedMonth?.minusMonths(1)
+                    _isLoadingMore.value = false
+                    fetchDates(false)
+                }
+            }
+            .addOnFailureListener {
+                _isLoadingMore.value = false
+            }
     }
 
     // Updated to fetch hit rates

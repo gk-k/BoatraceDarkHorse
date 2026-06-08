@@ -1,5 +1,6 @@
 package com.nakaya.gkk.boatracedarkhorse.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,12 +23,15 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,18 +45,49 @@ import java.time.LocalDate
 fun DateScreen(viewModel: RaceViewModel, onDateSelected: (String) -> Unit) {
     val dates by viewModel.dates.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val isLoadingMore by viewModel.isLoadingMore.collectAsState()
+    val noMoreData by viewModel.noMoreData.collectAsState()
+
+    val context = LocalContext.current
+    val listState = rememberLazyListState()
     val pullRefreshState = rememberPullToRefreshState()
 
 
     LaunchedEffect(Unit) {
-        viewModel.fetchDates()
+        viewModel.fetchDates(isRefresh = true)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is RaceViewModel.RaceEvent.NoMoreData -> {
+                    Toast.makeText(context, "これより過去のデータはありません", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItemsNumber = layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = (layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) + 1
+
+            lastVisibleItemIndex > (totalItemsNumber - 5) // 下から5番目くらいで読み込み開始
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && !isRefreshing && !isLoadingMore && !noMoreData && dates.isNotEmpty()) {
+            viewModel.fetchDates(isRefresh = false)
+        }
     }
 
     val groupedDates = dates.groupBy { it.substring(0, 7) } // Group by YYYY-MM
 
     PullToRefreshBox (
         isRefreshing = isRefreshing,
-        onRefresh = { viewModel.fetchDates() },
+        onRefresh = { viewModel.fetchDates(isRefresh = true) },
         state = pullRefreshState,
         modifier = Modifier
             .fillMaxWidth(),
@@ -65,6 +102,7 @@ fun DateScreen(viewModel: RaceViewModel, onDateSelected: (String) -> Unit) {
         }
     ) {
         LazyColumn(
+            state = listState,
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -114,6 +152,21 @@ fun DateScreen(viewModel: RaceViewModel, onDateSelected: (String) -> Unit) {
                             .padding(16.dp),
                         fontSize = 24.sp
                     )
+                }
+            }
+
+            if (isLoadingMore) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }

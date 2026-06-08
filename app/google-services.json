@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "979091069661",
+    "project_id": "boatrace-de368",
+    "storage_bucket": "boatrace-de368.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:979091069661:android:5c191dbe06753a88b85934",
+        "android_client_info": {
+          "package_name": "com.gkk.darkhorseapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAV78FiSPmSjI3V6oW1zD7fa7cB3EeFCgk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:979091069661:android:fc0ee55fa226e913b85934",
+        "android_client_info": {
+          "package_name": "com.nakaya.gkk.boatracedarkhorse"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAV78FiSPmSjI3V6oW1zD7fa7cB3EeFCgk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:979091069661:android:e4494457c02afd25b85934",
+        "android_client_info": {
+          "package_name": "com.nakaya.gkk.boatracestandard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAV78FiSPmSjI3V6oW1zD7fa7cB3EeFCgk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
